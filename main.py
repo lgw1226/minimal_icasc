@@ -1,6 +1,4 @@
-import torch
+from models.sharpen_focus import test
 
-from icecream import ic
 
-x = torch.tensor([1, 2, 3])
-ic(x)
+test()
