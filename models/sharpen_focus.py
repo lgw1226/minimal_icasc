@@ -169,7 +169,7 @@ class SharpenFocus(nn.Module):
         eps = 1e-6  # for numerical stability
 
         num = torch.sum(A_true * mask)
-        den = torch.sum(A_true)
+        den = torch.sum(A_true) + eps
         
         ac_loss = theta - num / den
 
