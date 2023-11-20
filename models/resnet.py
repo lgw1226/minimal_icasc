@@ -44,22 +44,22 @@ class ResNet(nn.Module):
         
         self.layer1 = nn.Sequential(
             collections.OrderedDict([
-                ('Layer1' + 'Conv2d', nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)),
-                ('Layer1' + 'BatchNorm2d', nn.BatchNorm2d(64)),
-                ('Layer1' + 'ReLU', nn.ReLU(inplace=True))
+                ('layer1' + 'conv2d', nn.Conv2d(3, 64, kernel_size=3, padding=1, bias=False)),
+                ('layer1' + 'batchnorm2d', nn.BatchNorm2d(64)),
+                ('layer1' + 'relu', nn.ReLU(inplace=True))
             ])
         )
-        self.layer2 = self._make_layer('Layer2', block, 64, num_blocks[0], 1)
-        self.layer3 = self._make_layer('Layer3', block, 128, num_blocks[1], 2)
-        self.layer4 = self._make_layer('Layer4', block, 256, num_blocks[2], 2)
+        self.layer2 = self._make_layer('layer2', block, 64, num_blocks[0], 1)
+        self.layer3 = self._make_layer('layer3', block, 128, num_blocks[1], 2)
+        self.layer4 = self._make_layer('layer4', block, 256, num_blocks[2], 2)
         
         if not self.parallel_last_layers:
-            self.layer5 = self._make_layer('Layer5', block, 512, num_blocks[3], 2)
+            self.layer5 = self._make_layer('layer5', block, 512, num_blocks[3], 2)
             self.fc = nn.Linear(512 * block.expansion, num_classes)
         else:
             self.last_layers = nn.ModuleDict()
             for idx in range(num_classes):
-                last_layer_name = 'Layer5' + 'Class' + str(idx + 1)
+                last_layer_name = 'layer5' + 'class' + str(idx)
                 self.last_layers.update({
                     last_layer_name: self._make_layer(last_layer_name, block, 1, num_blocks[3], 2, last=True)
                 })
@@ -76,7 +76,7 @@ class ResNet(nn.Module):
         if last:
             self.in_channels = 256
         for idx, stride in enumerate(strides):
-            block_name = name + 'Block' + str(idx + 1)
+            block_name = name + 'block' + str(idx)
             blocks.update({block_name: block(block_name, self.in_channels, out_channels, stride)})
             self.in_channels = out_channels * block.expansion
 

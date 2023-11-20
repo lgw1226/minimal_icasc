@@ -1,2 +1,12 @@
 # pycache
+__pycache__/
 *.pyc
+
+# dataset
+data/
+
+# wandb
+wandb/
+
+# trained models
+trained_models/
