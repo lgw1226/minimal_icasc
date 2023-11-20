@@ -12,7 +12,13 @@ from models.resnet import ResNet, resnet18
 
 class SharpenFocus(nn.Module):
 
-    def __init__(self, backbone_model: ResNet):
+    def __init__(
+            self,
+            backbone_model: ResNet,
+            sigma_weight=0.25,
+            omega=100,
+            theta=0.8
+        ):
         super().__init__()
 
         self.model = backbone_model
@@ -20,6 +26,10 @@ class SharpenFocus(nn.Module):
 
         self.num_classes = backbone_model.num_classes
         self.parallel_last_layers = backbone_model.parallel_last_layers
+        
+        self.sigma_weight = sigma_weight
+        self.omega = omega
+        self.theta = theta
 
         self.forward_features = {}
         self.backward_features = {}
@@ -65,11 +75,11 @@ class SharpenFocus(nn.Module):
         # compute attentions w.r.t. label logit scores (true class)
         A_true_inner, A_true_last, ff_true, _ = self._get_inner_last_attention_map(logits, labels)
 
-        as_in_loss, _ = self._compute_as_loss(A_true_inner, A_confused_inner)
-        as_la_loss, la_mask = self._compute_as_loss(A_true_last, A_confused_last)
+        as_in_loss, _ = self._compute_as_loss(A_true_inner, A_confused_inner, sigma_weight=self.sigma_weight, omega=self.omega)
+        as_la_loss, la_mask = self._compute_as_loss(A_true_last, A_confused_last, sigma_weight=self.sigma_weight, omega=self.omega)
         
-        resized_A_true_inner = F.interpolate(A_true_inner, size=la_mask.shape[-2:], mode='bilinear', align_corners=False)
-        ac_loss = self._compute_ac_loss(resized_A_true_inner, la_mask)
+        resized_la_mask = F.interpolate(la_mask, size=A_true_inner.shape[-2:], mode='bilinear', align_corners=False)
+        ac_loss = self._compute_ac_loss(A_true_inner, resized_la_mask, theta=self.theta)
 
         if self.parallel_last_layers:
             bw_loss = self._compute_black_white_loss(labels, ff_true)
@@ -234,6 +244,7 @@ def dataset_test():
     parallel_last_layers = True
     backbone = resnet18(num_classes, parallel_last_layers)
     model = SharpenFocus(backbone)
+    ic(model)
     
     for idx, (images, labels) in enumerate(val_loader):
     

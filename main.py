@@ -147,16 +147,12 @@ def validate(val_dl, model, criterion):
 
     batch_size = val_dl.batch_size
 
-    batch_time_meter = AverageMeter()
-    loss_meter = AverageMeter()
     top1_acc_meter = AverageMeter()
     top5_acc_meter = AverageMeter()
 
     model.eval()
 
     for idx, (inputs, labels) in enumerate(val_dl):
-
-        start_time = time.time()
 
         inputs = inputs.cuda()
         labels = labels.cuda()
@@ -170,10 +166,6 @@ def validate(val_dl, model, criterion):
 
         top1_acc, top5_acc = check_accuracy(outputs, labels, topk=(1, 5))
 
-        batch_time = time.time() - start_time
-
-        batch_time_meter.update(batch_time)
-        loss_meter.update(loss.item(), batch_size)
         top1_acc_meter.update(top1_acc, batch_size)
         top5_acc_meter.update(top5_acc, batch_size)
 
@@ -252,6 +244,10 @@ if __name__ == '__main__':
     parser.add_argument('--milestones', type=int, default=[50,100], nargs='+')
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight-decay', type=float, default=0.0001)
+
+    parser.add_argument('--sigma-weight', type=float, default=0.55)
+    parser.add_argument('--omega', type=int, default=100)
+    parser.add_argument('--theta', type=float, default=0.8)
 
     parser.add_argument('--wandb-key', type=str, default='0f5cd9050587f427bc738060f38f870174f2c8e4')
     parser.add_argument('--wandb-user', type=str, default='hphp')
