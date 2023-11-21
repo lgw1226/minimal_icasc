@@ -119,7 +119,7 @@ def train(train_dl, model, criterion, optimizer, epoch, batch_print_frequency=10
         batch_time = time.time() - start_time
 
         wandb.log({
-            'Epoch': idx,
+            'Epoch': epoch,
             'BatchTime': batch_time,
             'Loss/CrossEntropy': ce_loss,
             'Loss/AttConsistency': ac_loss,
