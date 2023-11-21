@@ -119,6 +119,8 @@ def train(train_dl, model, criterion, optimizer, epoch, batch_print_frequency=10
         batch_time = time.time() - start_time
 
         wandb.log({
+            'Epoch': idx,
+            'BatchTime': batch_time,
             'Loss/CrossEntropy': ce_loss,
             'Loss/AttConsistency': ac_loss,
             'Loss/AttSepInner': as_in_loss,
@@ -239,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', type=int, default=64)
 
     parser.add_argument('--parallel-last-layers', type=bool, default=True)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--lr-decay', type=float, default=0.9)
     parser.add_argument('--milestones', type=int, default=[50,100], nargs='+')
     parser.add_argument('--momentum', type=float, default=0.9)
