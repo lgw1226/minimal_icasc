@@ -56,10 +56,12 @@ class SharpenFocus(nn.Module):
                 module.register_forward_hook(partial(forward_hook, module_name))
                 module.register_full_backward_hook(partial(backward_hook, module_name))
 
-    def forward(self, images, labels):
+    def forward(self, images, labels, classification_only=False):
 
         logits = self.model(images)
         self.model.zero_grad()
+
+        if classification_only: return logits
 
         top2_values, top2_indices = torch.topk(logits, 2)
         first_indices = top2_indices[:,0]
