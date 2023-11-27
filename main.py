@@ -112,20 +112,16 @@ def train(
         if classification_only:
             outputs = model(inputs, labels, classification_only)
             ce_loss = criterion(outputs, labels)
-            loss = ce_loss
-
             ac_loss, as_in_loss, as_la_loss, bw_loss = (0, 0, 0, 0)
         else:
             if model.module.parallel_last_layers:
                 outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
                 ce_loss = criterion(outputs, labels)
-                loss = ce_loss + ac_loss + as_in_loss + as_la_loss + bw_loss
             else:
                 outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss = model(inputs, labels)
                 ce_loss = criterion(outputs, labels)
-                loss = ce_loss + ac_loss + as_in_loss + as_la_loss
-
                 bw_loss = 0
+        loss = ce_loss + ac_loss + as_in_loss + as_la_loss + bw_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -254,15 +250,15 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset-name', type=str, default='TinyImageNet')
     parser.add_argument('--start-epoch', type=int, default=0)
-    parser.add_argument('--num-epochs', type=int, default=100)
-    parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--num-epochs', type=int, default=90)
+    parser.add_argument('--batch-size', type=int, default=256)
 
-    parser.add_argument('--classification-only', type=bool, default=False)
-    parser.add_argument('--parallel-last-layers', type=bool, default=True)
+    parser.add_argument('--classification-only', action='store_true')
+    parser.add_argument('--parallel-last-layers', action='store_true')
 
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--lr-decay', type=float, default=0.9)
-    parser.add_argument('--milestones', type=int, default=[50,100], nargs='+')
+    parser.add_argument('--lr', type=float, default=0.1)
+    parser.add_argument('--lr-decay', type=float, default=0.1)
+    parser.add_argument('--milestones', type=int, default=[30, 60], nargs='+')
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight-decay', type=float, default=0.0001)
 

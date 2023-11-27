@@ -119,7 +119,7 @@ class SharpenFocus(nn.Module):
             self._get_module_attention_map(self.attention_layers[0], forward_features, backward_features)
         
         if not self.parallel_last_layers:
-            inner_layer_attention_map = \
+            last_layer_attention_map = \
                 self._get_module_attention_map(self.attention_layers[1], forward_features, backward_features)
 
         else:
