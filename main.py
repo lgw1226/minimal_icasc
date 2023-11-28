@@ -44,6 +44,9 @@ def main(args):
 
     raw_model = sfocus18(num_classes, args.parallel_last_layers)
     model = nn.DataParallel(raw_model, device_ids=[idx for idx in range(args.num_gpus)]).cuda()
+    num_parameters = sum([p.data.nelement() for p in model.parameters()])
+    print(f"Number of model parameters: {num_parameters}")
+    wandb.config.update({'num_parameters': num_parameters})
     wandb.watch(model, log_freq=100)
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = optim.SGD(
