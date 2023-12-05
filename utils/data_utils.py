@@ -257,8 +257,8 @@ def get_datasets(name, preload=False):
             transforms.Normalize(mean, var)
         ])
 
-        train = TinyImageNetDataset(root_dir='./data/tiny-imagenet-200', mode='train', preload=preload, transform=transform_train)
-        val = TinyImageNetDataset(root_dir='./data/tiny-imagenet-200', mode='val', preload=preload, transform=transform_val)
+        train = TinyImageNetDataset(root_dir='./dataset/tiny-imagenet-200', mode='train', preload=preload, transform=transform_train)
+        val = TinyImageNetDataset(root_dir='./dataset/tiny-imagenet-200', mode='val', preload=preload, transform=transform_val)
     
     unorm = UnNormalize(mean, var)
 
@@ -269,7 +269,7 @@ if __name__ == '__main__':
 
     from matplotlib import cm
 
-    train_dataset = TinyImageNetDataset('data/tiny-imagenet-200', preload=False)
+    train_dataset = TinyImageNetDataset('dataset/tiny-imagenet-200', preload=False)
     train_dataset_loader = DataLoader(
         train_dataset,
         batch_size=1,

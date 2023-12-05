@@ -137,13 +137,14 @@ class SharpenFocus(nn.Module):
         mean_features = []
         for idx in range(self.num_classes):
             module_name = 'layer5class' + str(idx)
-            mean_features.append(torch.mean(forward_features[module_name], (1, 2, 3)))
+            mean_features.append(torch.mean(forward_features[module_name], dim=(1, 2, 3)))
         mean_features = torch.stack(mean_features, dim=1)  # (batch_size, num_classes)
 
-        mean_features_true = mean_features[torch.arange(len(labels)), labels]
-        mean_features_all = torch.sum(mean_features, dim=1)
+        labels_one_hot = F.one_hot(labels, num_classes=self.num_classes)
+        mean_features_true = torch.sum(mean_features * labels_one_hot, dim=1)  # activation of true (1) class
+        mean_features_false = torch.sum(mean_features * (1 - labels_one_hot), dim=1) / (self.num_classes - 1)  # mean activation of false (200 - 1) class
 
-        bw_loss = torch.sum(mean_features_all - 2 * mean_features_true) / (len(labels) * self.num_classes)
+        bw_loss = torch.mean(mean_features_false - mean_features_true)
 
         return bw_loss
 

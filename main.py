@@ -4,10 +4,14 @@ import time
 import wandb
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
+import matplotlib.pyplot as plt
 
+from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader
+from torchvision.transforms.functional import to_pil_image
 
 from utils.data_utils import get_datasets
 from utils.average_meter import AverageMeter
@@ -68,11 +72,13 @@ def main(args):
 
     for epoch in range(args.start_epoch, args.num_epochs):
 
-        train(train_dl, model, criterion, optimizer, epoch, classification_only=args.classification_only)
-        top1_acc, top5_acc = validate(val_dl, model, criterion)
+        train(train_dl, model, criterion, optimizer, epoch, use_att_loss=args.use_att_loss, use_bw_loss=args.use_bw_loss)
+        top1_acc, top5_acc, true_overlays, conf_overlays = validate(val_dl, model)
         scheduler.step()
 
         wandb.log({
+            'AttentionMap/True': true_overlays,
+            'AttentionMap/Conf': conf_overlays,
             'Acc/ValidationTop1': top1_acc,
             'Acc/ValidationTop5': top5_acc,
         })
@@ -93,7 +99,8 @@ def train(
     optimizer,
     epoch,
     batch_print_frequency=100,
-    classification_only=False,
+    use_att_loss=False,
+    use_bw_loss=False
 ):
 
     batch_size = train_dl.batch_size
@@ -112,19 +119,22 @@ def train(
         inputs = inputs.cuda()
         labels = labels.cuda()
 
-        if classification_only:
-            outputs = model(inputs, labels, classification_only)
+        if model.module.parallel_last_layers:
+            outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
             ce_loss = criterion(outputs, labels)
-            ac_loss, as_in_loss, as_la_loss, bw_loss = (0, 0, 0, 0)
         else:
-            if model.module.parallel_last_layers:
-                outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
-                ce_loss = criterion(outputs, labels)
-            else:
-                outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss = model(inputs, labels)
-                ce_loss = criterion(outputs, labels)
-                bw_loss = 0
-        loss = ce_loss + ac_loss + as_in_loss + as_la_loss + bw_loss
+            outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss = model(inputs, labels)
+            ce_loss = criterion(outputs, labels)
+            bw_loss = 0
+
+        if use_att_loss and use_bw_loss:
+            loss = ce_loss + ac_loss + as_in_loss + as_la_loss + bw_loss
+        elif use_att_loss and not use_bw_loss:
+            loss = ce_loss + ac_loss + as_in_loss + as_la_loss
+        elif not use_att_loss and use_bw_loss:
+            loss = ce_loss + bw_loss
+        else:
+            loss = ce_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -161,7 +171,7 @@ def train(
                 f'Acc@5 {top5_acc_meter.val:.4f} ({top5_acc_meter.avg:.4f})'
             )
 
-def validate(val_dl, model, criterion):
+def validate(val_dl, model):
 
     batch_size = val_dl.batch_size
 
@@ -170,24 +180,76 @@ def validate(val_dl, model, criterion):
 
     model.eval()
 
-    for idx, (inputs, labels) in enumerate(val_dl):
+    for i, (inputs, labels) in enumerate(val_dl):
 
         inputs = inputs.cuda()
         labels = labels.cuda()
 
         if model.module.parallel_last_layers:
             outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
-            loss = criterion(outputs, labels) + ac_loss + as_in_loss + as_la_loss + bw_loss
         else:
             outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss = model(inputs, labels)
-            loss = criterion(outputs, labels) + ac_loss + as_in_loss + as_la_loss
 
         top1_acc, top5_acc = check_accuracy(outputs, labels, topk=(1, 5))
 
         top1_acc_meter.update(top1_acc, batch_size)
         top5_acc_meter.update(top5_acc, batch_size)
 
-    return top1_acc_meter.avg, top5_acc_meter.avg
+        if i == 0:
+
+            alpha = 0.6
+            true_overlays = []
+            conf_overlays = []
+
+            anno_file = open('dataset/tiny-imagenet-200/val/val_annotations.txt', 'r')
+            word_file = open('dataset/tiny-imagenet-200/words.txt')
+            ids = []; categories = []
+            for x in word_file.readlines():
+                id, category = x.split('\t')
+                ids.append(id); categories.append(category)
+
+            for j in range(batch_size // 2):
+
+                coords = []
+                line = anno_file.readline().split('\t')
+                for k, word in enumerate(line):
+                    if k == 1:
+                        for l, id in enumerate(ids):
+                            if word == id:
+                                category = categories[l]
+                    elif k >= 2:
+                        coords.append(int(word))
+
+                image = inputs[j]
+                image -= image.amin(dim=(1, 2), keepdim=True)
+                image /= image.amax(dim=(1, 2), keepdim=True) + 1e-6
+
+                true_mask = F.interpolate(A_true_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
+                true_mask -= true_mask.amin(dim=(1, 2), keepdim=True)
+                true_mask /= true_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
+                true_hmap = torch.cat((true_mask, torch.zeros(2, *true_mask.shape[-2:]).cuda()))
+
+                conf_mask = F.interpolate(A_conf_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
+                conf_mask -= conf_mask.amin(dim=(1, 2), keepdim=True)
+                conf_mask /= conf_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
+                conf_hmap = torch.cat((conf_mask, torch.zeros(2, *conf_mask.shape[-2:]).cuda()))
+
+                image = to_pil_image(image)
+                true_hmap = to_pil_image(true_hmap)
+                conf_hmap = to_pil_image(conf_hmap)
+
+                true_overlay = Image.blend(image, true_hmap, alpha)
+                draw = ImageDraw.Draw(true_overlay)
+                draw.rectangle(coords, outline=(0, 255, 0))
+
+                conf_overlay = Image.blend(image, true_hmap, alpha)
+                draw = ImageDraw.Draw(conf_overlay)
+                draw.rectangle(coords, outline=(0, 255, 0))
+
+                true_overlays.append(wandb.Image(true_overlay, caption=category))
+                conf_overlays.append(wandb.Image(conf_overlay, caption=category))
+
+    return top1_acc_meter.avg, top5_acc_meter.avg, true_overlays, conf_overlays
 
 def check_accuracy(outputs, labels, topk=(1, 5)):
 
@@ -254,9 +316,10 @@ if __name__ == '__main__':
     parser.add_argument('--dataset-name', type=str, default='TinyImageNet')
     parser.add_argument('--start-epoch', type=int, default=0)
     parser.add_argument('--num-epochs', type=int, default=90)
-    parser.add_argument('--batch-size', type=int, default=256)
+    parser.add_argument('--batch-size', type=int, default=64)
 
-    parser.add_argument('--classification-only', action='store_true')
+    parser.add_argument('--use-att-loss', action='store_true')  # if the flag is set, use att loss (ac, as_in, as_la)
+    parser.add_argument('--use-bw-loss', action='store_true')  # if the flag is set, use bw loss (bw)
     parser.add_argument('--parallel-last-layers', action='store_true')
 
     parser.add_argument('--lr', type=float, default=0.1)
