@@ -56,12 +56,10 @@ class SharpenFocus(nn.Module):
                 module.register_forward_hook(partial(forward_hook, module_name))
                 module.register_full_backward_hook(partial(backward_hook, module_name))
 
-    def forward(self, images, labels, classification_only=False):
+    def forward(self, images, labels):
 
         logits = self.model(images)
         self.model.zero_grad()
-
-        if classification_only: return logits
 
         top2_values, top2_indices = torch.topk(logits, 2)
         first_indices = top2_indices[:,0]
@@ -92,8 +90,8 @@ class SharpenFocus(nn.Module):
     def _populate_gradient(self, logits, labels):
         '''Backpropagate gradient only through each last layer designated by label, return forward/backward features.'''
 
-        masked_logit = torch.sum(logits[torch.arange(len(labels)), labels])  # logits[labels].shape: (batch_size,)
-        masked_logit.backward(retain_graph=True)
+        masked_logit = torch.sum(logits * F.one_hot(labels, num_classes=self.num_classes))
+        masked_logit.backward(gradient=masked_logit, retain_graph=True)
         self.model.zero_grad()
 
         return self.forward_features, self.backward_features

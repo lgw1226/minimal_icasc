@@ -249,6 +249,13 @@ def validate(val_dl, model):
                 true_overlays.append(wandb.Image(true_overlay, caption=category))
                 conf_overlays.append(wandb.Image(conf_overlay, caption=category))
 
+                # plt.figure()
+                # plt.subplot(1, 2, 1)
+                # plt.imshow(true_overlay)
+                # plt.subplot(1, 2, 2)
+                # plt.imshow(conf_overlay)
+                # plt.show()
+
     return top1_acc_meter.avg, top5_acc_meter.avg, true_overlays, conf_overlays
 
 def check_accuracy(outputs, labels, topk=(1, 5)):
