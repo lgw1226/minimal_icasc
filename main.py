@@ -72,7 +72,7 @@ def main(args):
 
     for epoch in range(args.start_epoch, args.num_epochs):
 
-        # train(train_dl, model, criterion, optimizer, epoch, use_att_loss=args.use_att_loss, use_bw_loss=args.use_bw_loss)
+        train(train_dl, model, criterion, optimizer, epoch, use_att_loss=args.use_att_loss, use_bw_loss=args.use_bw_loss)
         top1_acc, top5_acc, true_overlays, conf_overlays = validate(val_dl, model)
         scheduler.step()
 
