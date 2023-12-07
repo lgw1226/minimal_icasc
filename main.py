@@ -1,5 +1,6 @@
 import os
 import time
+import gc
 
 import wandb
 import torch
@@ -51,7 +52,6 @@ def main(args):
     num_parameters = sum([p.data.nelement() for p in model.parameters()])
     print(f"Number of model parameters: {num_parameters}")
     wandb.config.update({'num_parameters': num_parameters})
-    wandb.watch(model, log_freq=100)
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = optim.SGD(
         model.parameters(),
@@ -91,6 +91,10 @@ def main(args):
 
         if is_top1_best and is_top5_best:
             save_training(model, optimizer, scheduler, best_top1_acc, best_top5_acc, path)
+
+        del true_overlays, conf_overlays
+        gc.collect()
+        torch.cuda.empty_cache()
 
 def train(
     train_dl,
@@ -195,59 +199,64 @@ def validate(val_dl, model):
         top1_acc_meter.update(top1_acc, batch_size)
         top5_acc_meter.update(top5_acc, batch_size)
 
-        if i == 0:
+        with torch.no_grad():
 
-            alpha = 0.6
-            true_overlays = []
-            conf_overlays = []
+            A_true_la = A_true_la.cpu()
+            A_conf_la = A_conf_la.cpu()
 
-            anno_file = open('dataset/tiny-imagenet-200/val/val_annotations.txt', 'r')
-            word_file = open('dataset/tiny-imagenet-200/words.txt')
-            ids = []; categories = []
-            for x in word_file.readlines():
-                id, category = x.split('\t')
-                ids.append(id); categories.append(category)
+            if i == 0:
 
-            for j in range(batch_size // 2):
+                alpha = 0.6
+                true_overlays = []
+                conf_overlays = []
 
-                coords = []
-                line = anno_file.readline().split('\t')
-                for k, word in enumerate(line):
-                    if k == 1:
-                        for l, id in enumerate(ids):
-                            if word == id:
-                                category = categories[l]
-                    elif k >= 2:
-                        coords.append(int(word))
+                anno_file = open('dataset/tiny-imagenet-200/val/val_annotations.txt', 'r')
+                word_file = open('dataset/tiny-imagenet-200/words.txt')
+                ids = []; categories = []
+                for x in word_file.readlines():
+                    id, category = x.split('\t')
+                    ids.append(id); categories.append(category)
 
-                image = inputs[j]
-                image -= image.amin(dim=(1, 2), keepdim=True)
-                image /= image.amax(dim=(1, 2), keepdim=True) + 1e-6
+                for j in range(batch_size // 2):
 
-                true_mask = F.interpolate(A_true_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
-                true_mask -= true_mask.amin(dim=(1, 2), keepdim=True)
-                true_mask /= true_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
-                true_hmap = torch.cat((true_mask, torch.zeros(2, *true_mask.shape[-2:]).cuda()))
+                    coords = []
+                    line = anno_file.readline().split('\t')
+                    for k, word in enumerate(line):
+                        if k == 1:
+                            for l, id in enumerate(ids):
+                                if word == id:
+                                    category = categories[l]
+                        elif k >= 2:
+                            coords.append(int(word))
 
-                conf_mask = F.interpolate(A_conf_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
-                conf_mask -= conf_mask.amin(dim=(1, 2), keepdim=True)
-                conf_mask /= conf_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
-                conf_hmap = torch.cat((conf_mask, torch.zeros(2, *conf_mask.shape[-2:]).cuda()))
+                    image = inputs[j]
+                    image -= image.amin(dim=(1, 2), keepdim=True)
+                    image /= image.amax(dim=(1, 2), keepdim=True) + 1e-6
 
-                image = to_pil_image(image)
-                true_hmap = to_pil_image(true_hmap)
-                conf_hmap = to_pil_image(conf_hmap)
+                    true_mask = F.interpolate(A_true_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
+                    true_mask -= true_mask.amin(dim=(1, 2), keepdim=True)
+                    true_mask /= true_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
+                    true_hmap = torch.cat((true_mask, torch.zeros(2, *true_mask.shape[-2:])))
 
-                true_overlay = Image.blend(image, true_hmap, alpha)
-                draw = ImageDraw.Draw(true_overlay)
-                draw.rectangle(coords, outline=(0, 255, 0))
+                    conf_mask = F.interpolate(A_conf_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
+                    conf_mask -= conf_mask.amin(dim=(1, 2), keepdim=True)
+                    conf_mask /= conf_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
+                    conf_hmap = torch.cat((conf_mask, torch.zeros(2, *conf_mask.shape[-2:])))
 
-                conf_overlay = Image.blend(image, conf_hmap, alpha)
-                draw = ImageDraw.Draw(conf_overlay)
-                draw.rectangle(coords, outline=(0, 255, 0))
+                    image = to_pil_image(image)
+                    true_hmap = to_pil_image(true_hmap)
+                    conf_hmap = to_pil_image(conf_hmap)
 
-                true_overlays.append(wandb.Image(true_overlay, caption=category))
-                conf_overlays.append(wandb.Image(conf_overlay, caption=category))
+                    true_overlay = Image.blend(image, true_hmap, alpha)
+                    draw = ImageDraw.Draw(true_overlay)
+                    draw.rectangle(coords, outline=(0, 255, 0))
+
+                    conf_overlay = Image.blend(image, conf_hmap, alpha)
+                    draw = ImageDraw.Draw(conf_overlay)
+                    draw.rectangle(coords, outline=(0, 255, 0))
+
+                    true_overlays.append(wandb.Image(true_overlay, caption=category))
+                    conf_overlays.append(wandb.Image(conf_overlay, caption=category))
 
                 # plt.figure()
                 # plt.subplot(1, 2, 1)
@@ -270,7 +279,7 @@ def check_accuracy(outputs, labels, topk=(1, 5)):
     acc = []
     for k in topk:
         topk_acc = torch.sum(correct_idx[:,:k]) / batch_size
-        acc.append(topk_acc)
+        acc.append(topk_acc.item())
 
     return acc
 

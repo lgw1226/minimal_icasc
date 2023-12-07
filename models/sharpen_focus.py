@@ -155,7 +155,7 @@ class SharpenFocus(nn.Module):
 
         scaled_A_true = (A_true - A_true_min) / (A_true_max - A_true_min + eps)
         sigma = sigma_weight * A_true_max
-        mask = F.sigmoid(omega * (scaled_A_true - sigma))
+        mask = torch.sigmoid(omega * (scaled_A_true - sigma))
 
         num = torch.sum(torch.min(A_true, A_confused) * mask)
         den = torch.sum(A_true + A_confused) + eps
