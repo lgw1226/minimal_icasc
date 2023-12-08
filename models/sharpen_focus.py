@@ -150,10 +150,9 @@ class SharpenFocus(nn.Module):
         eps = 1e-6  # for numerical stability
 
         with torch.no_grad():
-            A_true_min = torch.min(A_true)
             A_true_max = torch.max(A_true)
 
-        scaled_A_true = (A_true - A_true_min) / (A_true_max - A_true_min + eps)
+        scaled_A_true = A_true / (A_true_max + eps)
         mask = torch.sigmoid(omega * (scaled_A_true - sigma))
 
         num = torch.sum(torch.min(A_true, A_confused) * mask)
