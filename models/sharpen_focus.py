@@ -149,6 +149,11 @@ class SharpenFocus(nn.Module):
 
         eps = 1e-6  # for numerical stability
 
+        # if sigmoid is going to be used to compute the attention map,
+        # scaling should be modified to account for range change
+        # for now, using relu makes the range of attention map (0, A_max)
+        # using sigmoid makes it (A_min, A_max)
+
         with torch.no_grad():
             A_true_max = torch.max(A_true)
 
