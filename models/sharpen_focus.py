@@ -15,7 +15,7 @@ class SharpenFocus(nn.Module):
     def __init__(
             self,
             backbone_model: ResNet,
-            sigma_weight=0.25,
+            sigma=0.55,
             omega=100,
             theta=0.8
         ):
@@ -25,9 +25,9 @@ class SharpenFocus(nn.Module):
         self.attention_layers = ('layer4', 'layer5')
 
         self.num_classes = backbone_model.num_classes
-        self.parallel_last_layers = backbone_model.parallel_last_layers
+        self.parallel_block_channels = backbone_model.parallel_block_channels
         
-        self.sigma_weight = sigma_weight
+        self.sigma = sigma
         self.omega = omega
         self.theta = theta
 
@@ -51,7 +51,7 @@ class SharpenFocus(nn.Module):
                 module.register_forward_hook(partial(forward_hook, module_name))
                 module.register_full_backward_hook(partial(backward_hook, module_name))
 
-        if self.parallel_last_layers:
+        if self.parallel_block_channels:
             for module_name, module in self.model.last_layers.items():
                 module.register_forward_hook(partial(forward_hook, module_name))
                 module.register_full_backward_hook(partial(backward_hook, module_name))
@@ -75,13 +75,13 @@ class SharpenFocus(nn.Module):
         # compute attentions w.r.t. label logit scores (true class)
         A_true_inner, A_true_last, ff_true, _ = self._get_inner_last_attention_map(logits, labels)
 
-        as_in_loss, _ = self._compute_as_loss(A_true_inner, A_confused_inner, sigma_weight=self.sigma_weight, omega=self.omega)
-        as_la_loss, la_mask = self._compute_as_loss(A_true_last, A_confused_last, sigma_weight=self.sigma_weight, omega=self.omega)
+        as_in_loss, _ = self._compute_as_loss(A_true_inner, A_confused_inner, sigma=self.sigma, omega=self.omega)
+        as_la_loss, la_mask = self._compute_as_loss(A_true_last, A_confused_last, sigma=self.sigma, omega=self.omega)
         
         resized_la_mask = F.interpolate(la_mask, size=A_true_inner.shape[-2:], mode='bilinear', align_corners=False)
         ac_loss = self._compute_ac_loss(A_true_inner, resized_la_mask, theta=self.theta)
 
-        if self.parallel_last_layers:
+        if self.parallel_block_channels:
             bw_loss = self._compute_black_white_loss(labels, ff_true)
             return logits, A_true_last, A_confused_last, ac_loss, as_in_loss, as_la_loss, bw_loss
         else:
@@ -116,7 +116,7 @@ class SharpenFocus(nn.Module):
         inner_layer_attention_map = \
             self._get_module_attention_map(self.attention_layers[0], forward_features, backward_features)
         
-        if not self.parallel_last_layers:
+        if not self.parallel_block_channels:
             last_layer_attention_map = \
                 self._get_module_attention_map(self.attention_layers[1], forward_features, backward_features)
         else:
@@ -141,11 +141,11 @@ class SharpenFocus(nn.Module):
         mean_features_true = torch.sum(mean_features * labels_one_hot, dim=1)  # activation of true (1) class
         mean_features_false = torch.sum(mean_features * (1 - labels_one_hot), dim=1) / (self.num_classes - 1)  # mean activation of false (200 - 1) class
 
-        bw_loss = torch.mean(mean_features_false - mean_features_true)
+        bw_loss = torch.mean(torch.exp(mean_features_false - mean_features_true))
 
         return bw_loss
 
-    def _compute_as_loss(self, A_true, A_confused, sigma_weight=0.25, omega=100):
+    def _compute_as_loss(self, A_true, A_confused, sigma=0.55, omega=100):
 
         eps = 1e-6  # for numerical stability
 
@@ -154,7 +154,6 @@ class SharpenFocus(nn.Module):
             A_true_max = torch.max(A_true)
 
         scaled_A_true = (A_true - A_true_min) / (A_true_max - A_true_min + eps)
-        sigma = sigma_weight * A_true_max
         mask = torch.sigmoid(omega * (scaled_A_true - sigma))
 
         num = torch.sum(torch.min(A_true, A_confused) * mask)
@@ -176,10 +175,10 @@ class SharpenFocus(nn.Module):
         return ac_loss
 
 
-def sfocus18(num_classses, parallel_last_layers=False):
+def sfocus18(num_classses, sigma=0.55, omega=100, theta=0.8, parallel_block_channels=0):
 
-    backbone = resnet18(num_classses, parallel_last_layers)
-    model = SharpenFocus(backbone)
+    backbone = resnet18(num_classses, parallel_block_channels)
+    model = SharpenFocus(backbone, sigma=sigma, omega=omega, theta=theta)
 
     return model
 
@@ -205,8 +204,8 @@ def tensor_test():
     from icecream import ic
 
     num_classes = 3
-    parallel_last_layers = True
-    backbone = resnet18(num_classes, parallel_last_layers)
+    parallel_block_channels = True
+    backbone = resnet18(num_classes, parallel_block_channels)
     model = SharpenFocus(backbone)
     
     batch_size = 4
@@ -241,8 +240,8 @@ def dataset_test():
         pin_memory=True
     )
 
-    parallel_last_layers = True
-    backbone = resnet18(num_classes, parallel_last_layers)
+    parallel_block_channels = 1
+    backbone = resnet18(num_classes, parallel_block_channels)
     model = SharpenFocus(backbone)
     ic(model)
     

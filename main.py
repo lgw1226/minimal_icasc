@@ -47,7 +47,7 @@ def main(args):
         pin_memory=True
     )
 
-    raw_model = sfocus18(num_classes, args.parallel_last_layers)
+    raw_model = sfocus18(num_classes, args.sigma, args.omega, args.theta, args.parallel_block_channels)
     model = nn.DataParallel(raw_model, device_ids=[idx for idx in range(args.num_gpus)]).cuda()
     num_parameters = sum([p.data.nelement() for p in model.parameters()])
     print(f"Number of model parameters: {num_parameters}")
@@ -123,7 +123,7 @@ def train(
         inputs = inputs.cuda()
         labels = labels.cuda()
 
-        if model.module.parallel_last_layers:
+        if model.module.parallel_block_channels:
             outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
             ce_loss = criterion(outputs, labels)
         else:
@@ -189,7 +189,7 @@ def validate(val_dl, model):
         inputs = inputs.cuda()
         labels = labels.cuda()
 
-        if model.module.parallel_last_layers:
+        if model.module.parallel_block_channels:
             outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss, bw_loss = model(inputs, labels)
         else:
             outputs, A_true_la, A_conf_la, ac_loss, as_in_loss, as_la_loss = model(inputs, labels)
@@ -336,7 +336,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--use-att-loss', action='store_true')  # if the flag is set, use att loss (ac, as_in, as_la)
     parser.add_argument('--use-bw-loss', action='store_true')  # if the flag is set, use bw loss (bw)
-    parser.add_argument('--parallel-last-layers', action='store_true')
+    # if 0, no parallel blocks
+    # else, # of channels of the parallel blocks are set accordingly
+    parser.add_argument('--parallel-block-channels', type=int, default=0)
 
     parser.add_argument('--lr', type=float, default=0.1)
     parser.add_argument('--lr-decay', type=float, default=0.1)
@@ -344,7 +346,7 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--weight-decay', type=float, default=0.0001)
 
-    parser.add_argument('--sigma-weight', type=float, default=0.55)
+    parser.add_argument('--sigma', type=float, default=0.55)
     parser.add_argument('--omega', type=int, default=100)
     parser.add_argument('--theta', type=float, default=0.8)
 
