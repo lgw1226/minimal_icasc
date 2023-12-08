@@ -155,15 +155,12 @@ class SharpenFocus(nn.Module):
         # using sigmoid makes it (A_min, A_max)
 
         with torch.no_grad():
-            A_true_max = torch.max(A_true)
+            A_true_max = torch.amax(A_true, dim=(2, 3), keepdim=True)
+            mask = torch.sigmoid(omega * (A_true - sigma * A_true_max))
+        num = torch.sum(torch.min(A_true, A_confused) * mask, dim=(2, 3))
+        den = torch.sum(A_true + A_confused, dim=(2, 3)) + eps
 
-        scaled_A_true = A_true / (A_true_max + eps)
-        mask = torch.sigmoid(omega * (scaled_A_true - sigma))
-
-        num = torch.sum(torch.min(A_true, A_confused) * mask)
-        den = torch.sum(A_true + A_confused) + eps
-
-        as_loss = 2 * num / den
+        as_loss = torch.mean(2 * num / den)
 
         return as_loss, mask
     
@@ -171,10 +168,10 @@ class SharpenFocus(nn.Module):
 
         eps = 1e-6  # for numerical stability
 
-        num = torch.sum(A_true * mask)
-        den = torch.sum(A_true) + eps
+        num = torch.sum(A_true * mask, dim=(2, 3))
+        den = torch.sum(A_true, dim=(2, 3)) + eps
         
-        ac_loss = theta - num / den
+        ac_loss = torch.mean(theta - num / den)
 
         return ac_loss
 
