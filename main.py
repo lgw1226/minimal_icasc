@@ -3,12 +3,15 @@ import time
 import gc
 
 import wandb
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
+import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader
@@ -207,6 +210,8 @@ def validate(val_dl, model):
             if i == 0:
 
                 alpha = 0.6
+                cmap = mpl.colormaps.get_cmap('coolwarm')
+
                 true_overlays = []
                 conf_overlays = []
 
@@ -218,7 +223,6 @@ def validate(val_dl, model):
                     ids.append(id); categories.append(category)
 
                 for j in range(batch_size // 2):
-
                     coords = []
                     line = anno_file.readline().split('\t')
                     for k, word in enumerate(line):
@@ -233,19 +237,19 @@ def validate(val_dl, model):
                     image -= image.amin(dim=(1, 2), keepdim=True)
                     image /= image.amax(dim=(1, 2), keepdim=True) + 1e-6
 
-                    true_mask = F.interpolate(A_true_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
-                    true_mask -= true_mask.amin(dim=(1, 2), keepdim=True)
-                    true_mask /= true_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
-                    true_hmap = torch.cat((true_mask, torch.zeros(2, *true_mask.shape[-2:])))
+                    true_mask = F.interpolate(A_true_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze()
+                    true_mask -= true_mask.min()
+                    true_mask /= true_mask.max() + 1e-6
+                    true_hmap = (cmap(true_mask)[:,:,:3] * 255).astype(np.uint8)
 
-                    conf_mask = F.interpolate(A_conf_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze(0)
-                    conf_mask -= conf_mask.amin(dim=(1, 2), keepdim=True)
-                    conf_mask /= conf_mask.amax(dim=(1, 2), keepdim=True) + 1e-6
-                    conf_hmap = torch.cat((conf_mask, torch.zeros(2, *conf_mask.shape[-2:])))
+                    conf_mask = F.interpolate(A_conf_la[j].unsqueeze(0), size=image.shape[-2:], mode='bilinear').squeeze()
+                    conf_mask -= conf_mask.min()
+                    conf_mask /= conf_mask.max() + 1e-6
+                    conf_hmap = (cmap(conf_mask)[:,:,:3] * 255).astype(np.uint8)
 
                     image = to_pil_image(image)
-                    true_hmap = to_pil_image(true_hmap)
-                    conf_hmap = to_pil_image(conf_hmap)
+                    true_hmap = Image.fromarray(true_hmap)
+                    conf_hmap = Image.fromarray(conf_hmap)
 
                     true_overlay = Image.blend(image, true_hmap, alpha)
                     draw = ImageDraw.Draw(true_overlay)
@@ -258,12 +262,12 @@ def validate(val_dl, model):
                     true_overlays.append(wandb.Image(true_overlay, caption=category))
                     conf_overlays.append(wandb.Image(conf_overlay, caption=category))
 
-                # plt.figure()
-                # plt.subplot(1, 2, 1)
-                # plt.imshow(true_overlay)
-                # plt.subplot(1, 2, 2)
-                # plt.imshow(conf_overlay)
-                # plt.show()
+                    # plt.figure()
+                    # plt.subplot(1, 2, 1)
+                    # plt.imshow(true_overlay)
+                    # plt.subplot(1, 2, 2)
+                    # plt.imshow(conf_overlay)
+                    # plt.show()
 
     return top1_acc_meter.avg, top5_acc_meter.avg, true_overlays, conf_overlays
 

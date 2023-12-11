@@ -104,7 +104,7 @@ class SharpenFocus(nn.Module):
         # grad_activation.shape, activation.shape: (batch_size, out_channels, height, width)
 
         weights = F.adaptive_avg_pool2d(F.relu(grad_activation), 1)  # weights.shape: (batch_size, out_channels, 1, 1)
-        attention_map = F.relu(torch.sum(torch.mul(activation, weights), 1, keepdim=True))  # attention_map.shape: (batch_size, 1, height, width)
+        attention_map = F.relu(torch.sum(torch.mul(activation, weights), dim=1, keepdim=True))  # attention_map.shape: (batch_size, 1, height, width)
 
         return attention_map
     
