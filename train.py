@@ -268,6 +268,8 @@ def validate(val_dl, model):
                     # plt.subplot(1, 2, 2)
                     # plt.imshow(conf_overlay)
                     # plt.show()
+                anno_file.close()
+                word_file.close()
 
     return top1_acc_meter.avg, top5_acc_meter.avg, true_overlays, conf_overlays
 
