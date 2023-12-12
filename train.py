@@ -301,31 +301,7 @@ def save_training(model, optimizer, scheduler, best_top1_acc, best_top5_acc, pat
 
 
 if __name__ == '__main__':
-
-    def test_sanity_accuracy():
-
-        from icecream import ic
-
-        batch_size = 4
-        num_classes = 5
-
-        outputs = torch.randn(batch_size, num_classes)
-        labels = torch.randint(0, num_classes, (batch_size,))
-        ic(outputs, labels)
-
-        topk = (1, 3)
-        maxk = max(topk)
-        val, idx = torch.topk(outputs, maxk, dim=1)
-        ic(idx)
-        expanded_labels = labels.unsqueeze(1).expand_as(idx)
-        ic(expanded_labels)
-        correct_idx = idx == expanded_labels
-        ic(correct_idx)
-
-        for k in topk:
-
-            ic(torch.sum(correct_idx[:,:k]) / batch_size)
-
+    
     import argparse
 
     parser = argparse.ArgumentParser()
