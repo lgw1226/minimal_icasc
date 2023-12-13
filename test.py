@@ -96,7 +96,7 @@ def validate(val_dl, model):
     H_score_running_mean = 0
 
     model.eval()
-    for i, (inputs, labels) in tqdm(enumerate(val_dl)):
+    for i, (inputs, labels) in enumerate(tqdm(val_dl)):
         inputs = inputs.cuda()
         labels = labels.cuda()
         batch_coords = coords[i*batch_size:i*batch_size+inputs.shape[0]]
