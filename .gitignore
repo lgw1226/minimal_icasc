@@ -11,5 +11,5 @@ wandb/
 # trained models
 trained_models/
 
-# test
-test.py
+# shell
+*.sh

@@ -17,7 +17,8 @@ class SharpenFocus(nn.Module):
             backbone_model: ResNet,
             sigma=0.55,
             omega=100,
-            theta=0.8
+            theta=0.8,
+            att_activation='relu',
         ):
         super().__init__()
 
@@ -30,6 +31,7 @@ class SharpenFocus(nn.Module):
         self.sigma = sigma
         self.omega = omega
         self.theta = theta
+        self.att_activation = att_activation
 
         self.forward_features = {}
         self.backward_features = {}
@@ -103,8 +105,12 @@ class SharpenFocus(nn.Module):
         activation = forward_features[module_name]
         # grad_activation.shape, activation.shape: (batch_size, out_channels, height, width)
 
-        weights = F.adaptive_avg_pool2d(F.relu(grad_activation), 1)  # weights.shape: (batch_size, out_channels, 1, 1)
-        attention_map = F.relu(torch.sum(torch.mul(activation, weights), dim=1, keepdim=True))  # attention_map.shape: (batch_size, 1, height, width)
+        if self.att_activation == 'relu':
+            weights = F.adaptive_avg_pool2d(F.relu(grad_activation), 1)  # weights.shape: (batch_size, out_channels, 1, 1)
+            attention_map = F.relu(torch.sum(activation * weights, dim=1, keepdim=True))  # attention_map.shape: (batch_size, 1, height, width)
+        elif self.att_activation == 'sigmoid':
+            weights = F.adaptive_avg_pool2d(torch.sigmoid(grad_activation), 1)  # weights.shape: (batch_size, out_channels, 1, 1)
+            attention_map = torch.sigmoid(torch.mean(activation * weights, dim=1, keepdim=True))  # attention_map.shape: (batch_size, 1, height, width)
 
         return attention_map
     
@@ -176,10 +182,10 @@ class SharpenFocus(nn.Module):
         return ac_loss
 
 
-def sfocus18(num_classses, sigma=0.55, omega=100, theta=0.8, parallel_block_channels=0):
+def sfocus18(num_classses, sigma=0.55, omega=100, theta=0.8, parallel_block_channels=0, att_activation='relu'):
 
     backbone = resnet18(num_classses, parallel_block_channels)
-    model = SharpenFocus(backbone, sigma=sigma, omega=omega, theta=theta)
+    model = SharpenFocus(backbone, sigma=sigma, omega=omega, theta=theta, att_activation=att_activation)
 
     return model
 

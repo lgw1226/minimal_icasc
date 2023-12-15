@@ -44,7 +44,11 @@ def main(args):
         pin_memory=True
     )
 
-    raw_model = sfocus18(num_classes, parallel_block_channels=args.parallel_block_channels)
+    raw_model = sfocus18(
+        num_classes,
+        parallel_block_channels=args.parallel_block_channels,
+        att_activation= args.att_activation,
+    )
     model = nn.DataParallel(raw_model, device_ids=[idx for idx in range(args.num_gpus)]).cuda()
     load_training(args.model_path, model)
 
@@ -228,6 +232,14 @@ def compute_bbox(images, att_maps, coords, threshold=0.5):
 @torch.no_grad()
 def compute_h_score(A_true, A_conf):
 
+    A_max = torch.max(
+        A_true.amax(dim=(2, 3), keepdim=True) + 1e-6,
+        A_conf.amax(dim=(2, 3), keepdim=True) + 1e-6,
+    )
+
+    A_true /= (A_max / 2)
+    A_conf /= (A_max / 2)
+
     # 분모 계산
     diff = torch.abs(2 * A_true - A_conf)
     numerator = torch.sum(diff) - torch.sum(A_conf)
@@ -292,6 +304,7 @@ if __name__ == '__main__':
     # if 0, no parallel blocks
     # else, # of channels of the parallel blocks are set accordingly
     parser.add_argument('--parallel-block-channels', type=int, default=0)
+    parser.add_argument('--att-activation', type=str, choices=['relu', 'sigmoid'], default='relu')
 
     parser.add_argument('--wandb-key', type=str, default='0f5cd9050587f427bc738060f38f870174f2c8e4')
     parser.add_argument('--wandb-user', type=str, default='hphp')
